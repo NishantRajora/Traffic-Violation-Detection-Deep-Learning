@@ -27,3 +27,5 @@ if torch.cuda.is_available():
     print(f"GPU Count: {torch.cuda.device_count()}")
 else:
     print("WARNING: GPU not detected. PyTorch will run on CPU.")
+
+
