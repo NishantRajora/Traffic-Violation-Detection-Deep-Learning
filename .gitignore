@@ -1,6 +1,6 @@
 helmet_dataset/
 runs/
-saved-models/
+saved_models/
 yolo11n-cls.pt
 yolo26n.pt
 
