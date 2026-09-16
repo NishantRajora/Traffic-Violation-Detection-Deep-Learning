@@ -31,6 +31,7 @@ if not MODEL_PATH.exists():
     )
 
 
+
 model = YOLO(str(MODEL_PATH))
 
 
