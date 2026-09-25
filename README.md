@@ -298,8 +298,11 @@ cd "Traffic Violation Detection-Deep Learning"
 
 ### 3. Install Dependencies
 ```bash
+# Optional: For NVIDIA GPU acceleration (CUDA)
 pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
-pip install ultralytics fastapi uvicorn python-multipart pillow opencv-python requests matplotlib
+
+# Install all project dependencies
+pip install -r requirements.txt
 ```
 
 ### 4. Run the Web Application
