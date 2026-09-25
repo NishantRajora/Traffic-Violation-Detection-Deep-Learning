@@ -130,8 +130,12 @@ Traffic Violation Detection-Deep Learning/
 │           └── confusion_matrix_normalized.png    # Normalized confusion matrix
 │
 ├── app.py                                         # FastAPI web application & interactive SPA interface
+├── videodetection.py                              # Real-time video object detection with HUD & export
+├── run_app.bat                                    # One-click Windows launcher for web app
+├── run_video.bat                                  # One-click Windows launcher for video detection
+├── v1.mp4                                         # Sample traffic video for detection testing
+├── requirements.txt                               # Project package dependencies
 ├── training.ipynb                                 # Jupyter Notebook for classification model training & test
-├── run_app.bat                                    # One-click Windows desktop launcher
 ├── source.txt                                     # Kaggle dataset provenance & source references
 ├── .gitignore                                     # Git exclusion rules for large models & caches
 ├── yolo11n-cls.pt                                 # Pretrained YOLO11 Nano classification backbone
@@ -316,6 +320,35 @@ pip install -r requirements.txt
 
 * **Open in Browser**:
   Navigate to **[http://127.0.0.1:8000](http://127.0.0.1:8000)**
+
+### 5. Run Video Object Detection (`videodetection.py`)
+Run real-time bounding box detection on video files (like `v1.mp4`) or live webcams:
+
+* **Windows (One-Click)**:
+  Double-click [run_video.bat](file:///c:/My%20Space/Github_Repo/Traffic%20Violation%20Detection-Deep%20Learning/run_video.bat)
+
+* **Interactive Mode**:
+  ```bash
+  python videodetection.py
+  ```
+  *(Prompts you to select `v1.mp4`, a custom file, or webcam, plus set the confidence threshold)*
+
+* **CLI Direct Execution (Sample `v1.mp4`)**:
+  ```bash
+  python videodetection.py --source v1.mp4 --conf 0.15
+  ```
+
+* **CLI Live Playback (Sample `v1.mp4`)**:
+  ```bash
+  python videodetection.py --source v1.mp4 --conf 0.15
+  ```
+  *(Displays real-time playback window with bounding boxes, violation HUD, and telemetry. Press `q` to quit, `space` to pause/resume. No video files are saved to disk)*
+
+* **Optional: Save to Disk**:
+  If you ever want to save an annotated video file, add the `--save` flag:
+  ```bash
+  python videodetection.py --source v1.mp4 --conf 0.15 --save
+  ```
 
 ---
 
