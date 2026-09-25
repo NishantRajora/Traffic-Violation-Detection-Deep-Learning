@@ -1,647 +1,352 @@
-# 🚦 Traffic Violation Detection Using YOLO
+# 🚦 Traffic Violation Detection & Localization System
 
-A deep-learning based **Traffic Violation Detection** project using the **YOLO (You Only Look Once)** framework for image classification.
+[![PyTorch](https://img.shields.io/badge/PyTorch-2.1.3%2BCUDA-EE4C2C?style=for-the-badge&logo=pytorch&logoColor=white)](https://pytorch.org/)
+[![YOLO11](https://img.shields.io/badge/YOLO-11-00FFFF?style=for-the-badge&logo=yolo&logoColor=black)](https://ultralytics.com/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.100%2B-009688?style=for-the-badge&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
+[![CUDA](https://img.shields.io/badge/NVIDIA%20RTX%204050-GPU%20Accelerated-76B900?style=for-the-badge&logo=nvidia&logoColor=white)](https://developer.nvidia.com/cuda-zone)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](https://opensource.org/licenses/MIT)
 
-The model is trained to classify traffic-related images into four categories:
+A deep learning computer vision system designed to detect and localize common traffic violations—specifically **riders without helmets** and **vehicle overloading**—along with safety compliance verification (**helmet wearing**).
 
-* 🪖 **Helmet**
-* ⚠️ **No Helmet**
-* 🚛 **Overloading**
-* 🌫️ **Blur**
-
-The project uses a pretrained **YOLO classification model** and fine-tunes it on a custom traffic-violation dataset.
+This project features a **Dual-Engine Architecture**:
+1. **Object Detection Engine (`yolo11n.pt`)**: Detects and plots precise spatial **bounding boxes** around individual riders, helmets, and overloaded vehicles with class labels and confidence percentages.
+2. **Classification Engine (`yolo11n-cls.pt`)**: Performs whole-image classification, confidence distribution analysis, and blur/image quality filtering.
+3. **Interactive Web Application (`app.py`)**: A modern, responsive FastAPI Single-Page Application (SPA) with real-time drag-and-drop inference, clipboard paste support, dynamic confidence thresholding, one-click sample testing, and REST APIs.
 
 ---
 
-## 📌 Project Overview
+## 📌 Table of Contents
 
-Road safety violations such as riding without a helmet and vehicle overloading are common traffic violations.
+- [Overview](#-overview)
+- [System Architecture](#-system-architecture)
+- [Repository File Structure](#-repository-file-structure)
+- [Technologies & Hardware](#-technologies--hardware)
+- [Dataset Architecture & Breakdown](#-dataset-architecture--breakdown)
+- [Dual-Engine Models](#-dual-engine-models)
+  - [1. Object Detection Engine (Bounding Boxes)](#1-object-detection-engine-bounding-boxes)
+  - [2. Image Classification Engine](#2-image-classification-engine)
+- [Experimental Results & Benchmarks](#-experimental-results--benchmarks)
+- [Interactive Web Application (`app.py`)](#-interactive-web-application-apppy)
+- [API Endpoints Reference](#-api-endpoints-reference)
+- [Installation & Quick Start](#-installation--quick-start)
+- [Troubleshooting & Windows Optimization](#-troubleshooting--windows-optimization)
+- [Future Roadmap](#-future-roadmap)
+- [Author & Acknowledgments](#-author--acknowledgments)
 
-This project uses computer vision and deep learning to automatically classify traffic images into predefined categories.
+---
 
-The overall workflow is:
+## 📌 Overview
+
+Road safety violations such as two-wheeler riders traveling without protective helmets and dangerous vehicle overloading are primary contributors to urban traffic fatalities. Manual enforcement by traffic police at busy intersections is labor-intensive and prone to human error.
+
+This system provides automated visual traffic monitoring:
+* **Real-time localization**: Pinpoints multiple riders and helmets in busy urban street scenes.
+* **Instant violation alerting**: Color-coded categorization for immediate law enforcement review.
+* **Edge deployment ready**: Sub-5ms inference per image using GPU acceleration.
+
+---
+
+## 🧠 System Architecture
 
 ```text
-Traffic Images
-      │
-      ▼
-Dataset Preparation
-      │
-      ▼
-YOLO Classification Model
-      │
-      ▼
-Transfer Learning / Fine-Tuning
-      │
-      ▼
-Validation
-      │
-      ▼
-Best Model (best.pt)
-      │
-      ▼
-Testing
+                               Traffic Image / Camera Stream
+                                             │
+                                             ▼
+                      ┌──────────────────────────────────────────────┐
+                      │            FastAPI Server (app.py)           │
+                      └──────────────────────┬───────────────────────┘
+                                             │
+                    ┌────────────────────────┴────────────────────────┐
+                    │                                                 │
+                    ▼                                                 ▼
+     ┌─────────────────────────────┐                   ┌─────────────────────────────┐
+     │   Object Detection Engine   │                   │    Classification Engine    │
+     │  (helmet_detection_model)   │                   │   (traffic_violation_model) │
+     └──────────────┬──────────────┘                   └──────────────┬──────────────┘
+                    │                                                 │
+                    ▼                                                 ▼
+      Spatial Coordinates [x1,y1,x2,y2]                  Global Class Probability:
+      - 🪖 helmet                                        - helmet (99.0%)
+      - 🚨 no_helmet                                     - no_helmet
+      - 🚛 overloading                                   - overloading
+                    │                                    - blur
+                    │                                                 │
+                    └────────────────────────┬────────────────────────┘
+                                             │
+                                             ▼
+                             Visual Feedback & Web Dashboard:
+                             - Bounding Boxes Plotted on Canvas
+                             - Status Badges & Localized Box Table
+                             - Confidence Distribution Metrics
 ```
 
 ---
 
-# 🧠 Technology Used
-
-| Technology       | Purpose                 |
-| ---------------- | ----------------------- |
-| Python           | Programming language    |
-| YOLO             | Image classification    |
-| Ultralytics      | YOLO implementation     |
-| PyTorch          | Deep learning framework |
-| CUDA             | GPU acceleration        |
-| NVIDIA RTX 4050  | Model training          |
-| PIL              | Image processing        |
-| Matplotlib       | Visualization           |
-| Jupyter Notebook | Training environment    |
-
----
-
-# 📂 Dataset Structure
-
-The dataset is organized into three subsets:
+## 📂 Repository File Structure
 
 ```text
-Traffic Violations Dataset/
+Traffic Violation Detection-Deep Learning/
 │
-├── train/
-│   ├── blur/
-│   ├── helmet/
-│   ├── no_helmet/
-│   └── overloading/
+├── saved_models/                                  # Production-ready trained model weights
+│   ├── helmet_detection_model.pt                  # YOLO11 Object Detection weights (bounding box head)
+│   ├── helmet_model.pt                            # YOLO11 Classification weights (backward compatibility)
+│   └── traffic_violation_model.pt                 # YOLO11 Classification weights (aliased)
 │
-├── validation/
-│   ├── blur/
-│   ├── helmet/
-│   ├── no_helmet/
-│   └── overloading/
+├── Traffic Violations Dataset/                    # Multi-split image dataset
+│   ├── train/                                     # Training split (1,799 images)
+│   │   ├── helmet/                                # 601 images
+│   │   ├── no_helmet/                             # 594 images
+│   │   └── overloading/                           # 604 images
+│   ├── validation/                                # Validation split (300 images)
+│   │   ├── helmet/                                # 100 images
+│   │   ├── no_helmet/                             # 100 images
+│   │   └── overloading/                           # 100 images
+│   ├── test/                                      # Final evaluation split (297 images)
+│   │   ├── helmet/                                # 100 images
+│   │   ├── no_helmet/                             # 54 images
+│   │   └── overloading/                           # 143 images
+│   ├── train.cache                                # Ultralytics fast RAM cache
+│   ├── validation.cache                           # Validation cache
+│   └── test.cache                                 # Test cache
 │
-└── test/
-    ├── blur/
-    ├── helmet/
-    ├── no_helmet/
-    └── overloading/
-```
-
-Each class is represented by a separate folder.
-
-### Classes
-
-```text
-blur
-helmet
-no_helmet
-overloading
-```
-
-The model learns to classify an input image into one of these four categories.
-
----
-
-# 🔍 Classification vs Object Detection
-
-This project currently uses **YOLO image classification**.
-
-The model predicts the class of the complete image.
-
-For example:
-
-```text
-Input Image
-     │
-     ▼
-YOLO Classification Model
-     │
-     ▼
-no_helmet
-94.32%
-```
-
-It does **not** generate bounding boxes around individual objects.
-
-For bounding-box based detection, a YOLO object-detection dataset with corresponding annotation files would be required.
-
----
-
-# 🤖 YOLO Model
-
-The project uses a pretrained YOLO classification model:
-
-```python
-YOLO("yolo11n-cls.pt")
-```
-
-The `-cls` suffix indicates that this is a **classification model**.
-
-The pretrained model is fine-tuned using the custom traffic violation dataset.
-
----
-
-# 🔄 Transfer Learning
-
-Instead of training the neural network completely from scratch, a pretrained YOLO model is used.
-
-```text
-Pretrained YOLO
-       │
-       │
-       ▼
-Traffic Violation Dataset
-       │
-       ▼
-Fine-Tuning
-       │
-       ▼
-Traffic Violation Model
-```
-
-The pretrained model already contains useful visual features.
-
-Fine-tuning allows it to adapt those features to the four traffic-related classes.
-
----
-
-# ⚙️ Hardware Configuration
-
-Training was performed using an NVIDIA GPU.
-
-### GPU
-
-```text
-NVIDIA GeForce RTX 4050 Laptop GPU
-```
-
-### CUDA
-
-The training environment was configured with CUDA support.
-
-The following code is used to verify GPU availability:
-
-```python
-import torch
-
-print("PyTorch Version :", torch.__version__)
-print("CUDA Version    :", torch.version.cuda)
-print("CUDA Available  :", torch.cuda.is_available())
-
-if torch.cuda.is_available():
-    print("GPU :", torch.cuda.get_device_name(0))
-else:
-    print("WARNING: GPU not detected. Training will use CPU.")
-```
-
-Expected output:
-
-```text
-PyTorch Version : ...
-CUDA Version    : ...
-CUDA Available  : True
-GPU             : NVIDIA GeForce RTX 4050 Laptop GPU
-```
-
----
-
-# 📦 Installation
-
-Install the required packages:
-
-```bash
-pip install ultralytics torch torchvision
-```
-
-Additional packages used in the project:
-
-```bash
-pip install pillow matplotlib
-```
-
----
-
-# 🏋️ Training
-
-The model is trained using the Ultralytics YOLO framework.
-
-Basic model initialization:
-
-```python
-from ultralytics import YOLO
-
-model = YOLO("yolo11n-cls.pt")
-```
-
-The dataset is then supplied to the training process.
-
-Example training configuration:
-
-```python
-results = model.train(
-
-    data="Traffic Violations Dataset",
-
-    epochs=50,
-
-    batch=32,
-
-    imgsz=224,
-
-    device="0",
-
-    workers=4,
-
-    project="Traffic_Violation_Runs",
-
-    name="helmet_classification",
-
-    save=True,
-
-    val=True,
-
-    patience=10,
-
-    cache=False,
-
-    verbose=True
-)
-```
-
----
-
-# ⚙️ Training Parameters
-
-| Parameter  | Value | Description                          |
-| ---------- | ----: | ------------------------------------ |
-| `epochs`   |    50 | Number of training epochs            |
-| `batch`    |    32 | Number of images processed per batch |
-| `imgsz`    |   224 | Input image size                     |
-| `device`   |   `0` | NVIDIA GPU                           |
-| `workers`  |     4 | Data-loading workers                 |
-| `val`      |  True | Perform validation                   |
-| `save`     |  True | Save model checkpoints               |
-| `patience` |    10 | Early stopping patience              |
-| `cache`    | False | Dataset caching disabled             |
-
-These values can be adjusted depending on available hardware and dataset size.
-
----
-
-# 📚 Important Training Concepts
-
-## Epoch
-
-An epoch represents one complete pass through the training dataset.
-
-For example:
-
-```text
-Epoch 1
-Epoch 2
-Epoch 3
-...
-Epoch 50
-```
-
----
-
-## Batch Size
-
-The batch size specifies how many images are processed before the model updates its weights.
-
-For example:
-
-```text
-batch = 32
-```
-
-means approximately 32 images are processed at a time.
-
----
-
-## Image Size
-
-```text
-imgsz = 224
-```
-
-means the images are processed at approximately:
-
-```text
-224 × 224
-```
-
-Higher image sizes can preserve more visual detail but require more computational resources.
-
----
-
-## Workers
-
-```text
-workers = 4
-```
-
-controls the number of parallel processes used for loading and preparing training data.
-
-Workers primarily help with data loading and preprocessing.
-
----
-
-# 📈 Accuracy During Training
-
-The model's performance is monitored after each epoch.
-
-The project tracks:
-
-```text
-Top-1 Accuracy
-Top-5 Accuracy
-```
-
-For example:
-
-```text
-Epoch 1
-Top-1 Accuracy: 72.00%
-
-Epoch 2
-Top-1 Accuracy: 79.00%
-
-Epoch 3
-Top-1 Accuracy: 84.00%
-
-...
-```
-
-### Top-1 Accuracy
-
-Top-1 accuracy measures whether the model's highest-confidence prediction matches the actual class.
-
-For this project, **Top-1 accuracy is the primary accuracy metric**.
-
----
-
-# 🧪 Validation Dataset
-
-The validation dataset is used during training to monitor how well the model generalizes to images that are not directly used for updating the model's weights.
-
-```text
-Training Dataset
-      ↓
-Model learns
-      ↓
-Validation Dataset
-      ↓
-Performance monitoring
-```
-
-Validation accuracy can be monitored after every epoch.
-
----
-
-# 🧪 Testing Dataset
-
-The test dataset is kept separate from training.
-
-After training is complete, the best model is evaluated using the test dataset.
-
-```text
-Training
-    ↓
-Validation
-    ↓
-Best Model
-    ↓
-Test Dataset
-    ↓
-Final Performance
-```
-
-The test accuracy provides an estimate of how the trained model performs on unseen test images.
-
----
-
-# 🏆 Best Model
-
-During training, YOLO saves model checkpoints.
-
-The important file is:
-
-```text
-best.pt
-```
-
-A typical training output directory is:
-
-```text
-Traffic_Violation_Runs/
-└── helmet_classification/
-    └── weights/
-        ├── best.pt
-        └── last.pt
-```
-
-### `best.pt`
-
-Contains the checkpoint selected as the best-performing model during training/validation.
-
-### `last.pt`
-
-Contains the checkpoint from the final training epoch.
-
-For final inference, `best.pt` is generally used.
-
----
-
-# 🔬 Model Evaluation
-
-After training, the best model can be loaded:
-
-```python
-from ultralytics import YOLO
-
-model = YOLO(
-    "Traffic_Violation_Runs/helmet_classification/weights/best.pt"
-)
-```
-
-The model can then be evaluated on the test dataset:
-
-```python
-metrics = model.val(
-    data="Traffic Violations Dataset",
-    split="test",
-    imgsz=224,
-    batch=32,
-    device="0"
-)
-```
-
-The final Top-1 accuracy can be displayed using:
-
-```python
-print(
-    f"Top-1 Accuracy: {metrics.top1 * 100:.2f}%"
-)
-```
-
----
-
-# 📊 Training vs Testing Accuracy
-
-These two measurements have different purposes.
-
-### During training
-
-The model's validation performance is monitored after each epoch:
-
-```text
-Epoch 1 → Validation Accuracy
-Epoch 2 → Validation Accuracy
-Epoch 3 → Validation Accuracy
-...
-```
-
-### After training
-
-The final trained model is evaluated on the separate test dataset:
-
-```text
-Best Model
-    ↓
-Test Dataset
-    ↓
-Final Test Accuracy
-```
-
-The test dataset should not be used to update the model's weights.
-
----
-
-# 📁 Expected Project Structure
-
-After training, the project can look like:
-
-```text
-Traffic_Violation_Project/
-│
-├── Traffic Violations Dataset/
-│   ├── train/
-│   │   ├── blur/
-│   │   ├── helmet/
-│   │   ├── no_helmet/
-│   │   └── overloading/
+├── runs/                                          # Training and evaluation logs & curves
+│   ├── detect/                                    # Object detection runs
+│   │   └── Traffic_Detection_Runs/
+│   │       ├── helmet_detection-5/                # Checkpoints, PR curves, F1 curve, confusion matrix
+│   │       │   ├── weights/                       # best.pt and last.pt checkpoints
+│   │       │   ├── BoxPR_curve.png                # Precision-Recall curve
+│   │       │   ├── BoxF1_curve.png                # F1 confidence curve
+│   │       │   ├── results.png                    # Training/validation losses across epochs
+│   │       │   └── results.csv                    # Loss and mAP50 telemetry
+│   │       └── ...                                # Previous detection iterations (1 to 4)
 │   │
-│   ├── validation/
-│   │   ├── blur/
-│   │   ├── helmet/
-│   │   ├── no_helmet/
-│   │   └── overloading/
-│   │
-│   └── test/
-│       ├── blur/
-│       ├── helmet/
-│       ├── no_helmet/
-│       └── overloading/
+│   └── classify/                                  # Classification runs
+│       ├── Traffic_Violation_Runs/
+│       │   └── helmet_classification/             # 15-epoch classification run artifacts
+│       │       ├── weights/                       # best.pt and last.pt
+│       │       └── results.csv                    # Accuracy metrics
+│       └── val/                                   # Evaluation results on unseen test set
+│           ├── confusion_matrix.png               # Test confusion matrix
+│           └── confusion_matrix_normalized.png    # Normalized confusion matrix
 │
-├── Traffic_Violation_Runs/
-│   └── helmet_classification/
-│       └── weights/
-│           ├── best.pt
-│           └── last.pt
-│
-├── saved_models/
-│   └── helmet_model.pt
-│
-└── training.ipynb
+├── app.py                                         # FastAPI web application & interactive SPA interface
+├── training.ipynb                                 # Jupyter Notebook for classification model training & test
+├── run_app.bat                                    # One-click Windows desktop launcher
+├── source.txt                                     # Kaggle dataset provenance & source references
+├── .gitignore                                     # Git exclusion rules for large models & caches
+├── yolo11n-cls.pt                                 # Pretrained YOLO11 Nano classification backbone
+├── yolo26n.pt                                     # Pretrained COCO general detection backbone
+└── README.md                                      # Comprehensive project documentation
 ```
 
 ---
 
-# 🚀 Workflow Summary
+## 🛠️ Technologies & Hardware
+
+| Component | Specification / Tool | Purpose |
+| :--- | :--- | :--- |
+| **Language** | Python 3.13 | Primary development environment |
+| **Framework** | Ultralytics YOLO11 | Deep learning architecture & training |
+| **Deep Learning** | PyTorch 2.13.0 + CUDA 13.2 | Neural network tensor computation & autograd |
+| **Acceleration** | NVIDIA GeForce RTX 4050 Laptop GPU (6 GB VRAM) | Model training and ultra-low latency inference |
+| **Web Server** | FastAPI & Uvicorn | High-performance asynchronous API backend |
+| **Frontend UI** | HTML5 / CSS3 / Vanilla JavaScript (SPA) | Drag-and-drop dashboard, canvas rendering |
+| **Computer Vision** | OpenCV (`cv2`) & Pillow (`PIL`) | Image decoding, BGR-to-RGB conversion, drawing |
+| **Data Science** | NumPy, Pandas, Matplotlib | Telemetry logging, metric curves, confusion matrices |
+
+---
+
+## 📊 Dataset Architecture & Breakdown
+
+The primary dataset is structured into **Train**, **Validation**, and **Test** splits across traffic compliance and violation categories:
 
 ```text
-                  DATASET
-                     │
-                     ▼
-          ┌─────────────────────┐
-          │ Train / Validation  │
-          │       / Test        │
-          └──────────┬──────────┘
-                     │
-                     ▼
-             Pretrained YOLO
-              yolo11n-cls.pt
-                     │
-                     ▼
-                Fine-Tuning
-                     │
-                     ▼
-               Epoch Training
-                     │
-                     ▼
-             Validation Accuracy
-                     │
-                     ▼
-                  best.pt
-                     │
-                     ▼
-              Test Evaluation
-                     │
-                     ▼
-              Final Accuracy
+Traffic Violations Dataset: 2,396 Total Images
+```
+
+| Class | Train Set | Validation Set | Test Set | Total Images | Traffic Status |
+| :--- | :---: | :---: | :---: | :---: | :--- |
+| 🪖 **`helmet`** | 601 | 100 | 100 | **801** | ✅ Compliant / Safe |
+| 🚨 **`no_helmet`** | 594 | 100 | 54 | **748** | 🚨 Traffic Violation |
+| 🚛 **`overloading`** | 604 | 100 | 143 | **847** | 🚨 Traffic Violation |
+| **Total** | **1,799** | **300** | **297** | **2,396** | — |
+
+*Source Reference:* Curated traffic datasets available on Kaggle (see [source.txt](file:///c:/My%20Space/Github_Repo/Traffic%20Violation%20Detection-Deep%20Learning/source.txt)).
+
+---
+
+## 🤖 Dual-Engine Models
+
+### 1. Object Detection Engine (Bounding Boxes)
+* **Checkpoint File**: `saved_models/helmet_detection_model.pt`
+* **Base Architecture**: `yolo11n.pt` (Object Detection Head)
+* **Task Type**: `detect`
+* **Classes**: `{0: 'helmet', 1: 'no_helmet', 2: 'overloading'}`
+* **Inference Method**: Computes bounding box coordinates `[x1, y1, x2, y2]`, class index, and confidence score. Renders overlays using `result.plot(line_width=3, font_size=1)`.
+
+### 2. Image Classification Engine
+* **Checkpoint File**: `saved_models/traffic_violation_model.pt` (aliased to `helmet_model.pt`)
+* **Base Architecture**: `yolo11n-cls.pt` (Classification Head)
+* **Task Type**: `classify`
+* **Classes**: `{0: 'blur', 1: 'helmet', 2: 'no_helmet', 3: 'overloading'}`
+* **Inference Method**: Produces global class likelihood vector via Softmax across the entire frame.
+
+---
+
+## 📈 Experimental Results & Benchmarks
+
+### Classification Performance (Trained in `training.ipynb`)
+Evaluated across 15 training epochs and tested against the 297 unseen test images:
+
+* **Validation Top-1 Accuracy**: **`99.00%`** (Epoch 15)
+* **Final Test Top-1 Accuracy**: **`81.48%`**
+* **Final Test Top-5 Accuracy**: **`100.00%`**
+* **Inference Speed**: **0.4 ms** preprocess, **4.7 ms** inference per image on NVIDIA RTX 4050 GPU.
+
+### Object Detection Performance (`helmet_detection-5`)
+* **mAP@50**: **`30.7%`** (Initial 3-epoch transfer run)
+* **Precision / Recall**: 34.1% Precision / 28.0% Recall
+* **Average Detection Latency**: **~15 - 25 ms** per 640×640 image frame on GPU.
+
+---
+
+## 🌐 Interactive Web Application (`app.py`)
+
+A full-stack, real-time web application is included to interact with both detection and classification engines without external UI libraries.
+
+### Key Features
+1. **Interactive Drag-and-Drop Dropzone**:
+   - Drag and drop traffic images directly from file manager.
+   - Click to browse local files.
+   - **Clipboard Paste (`Ctrl + V`)**: Copy any screenshot or web image and paste directly onto the dashboard.
+2. **Real-Time Bounding Box Overlays**:
+   - Distinct color-coded bounding boxes drawn directly on canvas:
+     - 🪖 **Green**: Helmet (Compliant)
+     - 🚨 **Red**: No Helmet (Violation)
+     - 🚛 **Dark Red**: Overloading (Violation)
+3. **Interactive Sensitivity Controls**:
+   - Dynamic **Detection Confidence Slider** (`5%` to `80%`, default `15%`).
+   - "Boxes vs. Original" toggle to compare raw vs. annotated images with zero latency.
+4. **Detailed Bounding Box Telemetry**:
+   - Lists every detected box with exact pixel bounding coordinates `[x1, y1, x2, y2]` and confidence tags.
+   - Instant count breakdown: Total Targets, Violations, Compliant Riders.
+5. **One-Click Curated Test Samples**:
+   - Pre-loaded test samples accessible with a single click:
+     - 🪖 **Helmet (Safe)** — *Test helmmet (19).jpg* (**87.8%** conf)
+     - 🚨 **No Helmet (Violation)** — *test-nohelmet (3).jpg* (**82.4%** conf)
+     - 🚨 **Multi-Riders Without Helmet** — *test-nohelmet (4).jpg* (**3 boxes detected**)
+     - 🚛 **Overloading** — *test-nohelmet (28).jpg* (**79.0%** conf)
+6. **Dual Mode Switcher**:
+   - Seamlessly toggle between **Object Detection** (Bounding Boxes) and **Classification** (Whole-Image Probabilities).
+
+---
+
+## 🔌 API Endpoints Reference
+
+The FastAPI server provides automated Swagger interactive documentation at `http://127.0.0.1:8000/docs`.
+
+| Method | Endpoint | Description | Parameters / Payload |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/` | Web Application Dashboard | None (returns HTML SPA) |
+| `GET` | `/api/info` | Hardware & Model Telemetry | Returns active GPU, PyTorch version, loaded weights |
+| `POST` | `/api/predict` | Run Model Inference | `file` (multipart), `mode` (`detect` or `classify`), `conf` (float) |
+| `POST` | `/api/predict-url` | Predict from Remote Link | `url` (str), `mode` (`detect` or `classify`), `conf` (float) |
+| `GET` | `/api/samples` | List Pre-loaded Samples | Returns sample metadata and preview endpoints |
+| `GET` | `/api/sample-file` | Stream Sample Image | `id` (sample query string) |
+
+### Sample `POST /api/predict` Response (Detection Mode):
+```json
+{
+  "mode": "detect",
+  "status": "TRAFFIC VIOLATION DETECTED",
+  "status_sub": "2 violation box(es) detected",
+  "status_color": "#ef4444",
+  "status_icon": "🚨",
+  "total_detections": 2,
+  "violation_count": 2,
+  "compliant_count": 0,
+  "boxes": [
+    {
+      "class": "no_helmet",
+      "label": "No Helmet",
+      "confidence_pct": 82.4,
+      "bbox": [779.1, 292.2, 1050.6, 826.5],
+      "color": "#ef4444",
+      "type": "violation"
+    }
+  ],
+  "annotated_image": "data:image/jpeg;base64,...",
+  "inference_ms": 18.4,
+  "device": "NVIDIA GeForce RTX 4050 Laptop GPU",
+  "image_size": "1080 × 1920"
+}
 ```
 
 ---
 
-# ⚠️ Current Project Limitation
+## 🚀 Installation & Quick Start
 
-The current model performs **image-level classification**.
+### 1. Prerequisites
+- Python 3.10+ (Python 3.13 recommended)
+- NVIDIA GPU with CUDA 12.x or 13.x (Optional, falls back to CPU automatically)
 
-For example:
-
-```text
-Image
-  ↓
-YOLO
-  ↓
-NO_HELMET — 94%
+### 2. Clone Repository
+```bash
+git clone https://github.com/NishantRajora/Traffic-Violation-Detection-Deep-Learning.git
+cd "Traffic Violation Detection-Deep Learning"
 ```
 
-It does not identify the exact location of the rider or helmet.
+### 3. Install Dependencies
+```bash
+pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
+pip install ultralytics fastapi uvicorn python-multipart pillow opencv-python requests matplotlib
+```
 
-For a complete traffic violation detection system, a future version can use **YOLO object detection** with bounding boxes to detect individual riders, helmets, motorcycles, and other objects.
+### 4. Run the Web Application
+* **Windows (One-Click)**:
+  Double-click [run_app.bat](file:///c:/My%20Space/Github_Repo/Traffic%20Violation%20Detection-Deep%20Learning/run_app.bat)
+
+* **Terminal**:
+  ```bash
+  python app.py
+  ```
+
+* **Open in Browser**:
+  Navigate to **[http://127.0.0.1:8000](http://127.0.0.1:8000)**
 
 ---
 
-# 👨‍💻 Author
+## 🔧 Troubleshooting & Windows Optimization
 
-**Nishant Rajora**
+### OpenMP Conflict (`libiomp5md.dll`)
+On Windows environments with multiple OpenMP runtimes (e.g., Anaconda + PyTorch), the application automatically injects:
+```python
+import os
+os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
+```
+If executing scripts from PowerShell manually, set:
+```powershell
+$env:KMP_DUPLICATE_LIB_OK="TRUE"
+```
 
-B.Tech Computer Science & Engineering
-Specialization: Data Science
-
-The NorthCap University, Gurugram
+### Multi-Processing Workers in DataLoader
+On Windows Jupyter Notebooks, set `workers=0` during training in `model.train(..., workers=0)` to avoid deadlocks.
 
 ---
 
-# 📌 Project Status
+## 🔮 Future Roadmap
 
-**Current Stage:**
+- [ ] **Extended Bounding-Box Detection**: Train `yolo11m.pt` for 50+ epochs on high-resolution annotated traffic video datasets.
+- [ ] **Live RTSP Stream Processing**: Direct ingestion from intersection CCTV cameras.
+- [ ] **Automated Number Plate Recognition (ANPR / ALPR)**: Extract vehicle registration numbers of violating vehicles automatically.
+- [ ] **Automated E-Challan Issuance**: Database integration for automated traffic fine generation.
 
-* ✅ Dataset preparation
-* ✅ YOLO classification model
-* ✅ GPU configuration
-* ✅ Model training
-* ✅ Validation
-* ✅ Best model generation
-* ✅ Test evaluation
+---
 
-**Next Stage:**
+## 👨‍💻 Author & Acknowledgments
 
-* Web-based image testing
-* FastAPI backend
-* Drag-and-drop image interface
-* Model inference API
-* Traffic violation detection interface
+**Nishant Rajora**  
+*B.Tech in Computer Science & Engineering (Specialization: Data Science)*  
+**The NorthCap University, Gurugram**
+
+*Special thanks to the Ultralytics team for YOLO11, and the open-source computer vision community.*
