@@ -1,10 +1,21 @@
+# Dataset and Run Artifacts
+data/
+HelmetDataset/
 runs/
-saved_models/
-yolo11n-cls.pt
+output/
+
+# Pretrained Base Checkpoints
+yolov8n.pt
 yolo26n.pt
+yolo11n.pt
+yolo11n-cls.pt
 
-Traffic Violations Dataset/
-normal/
-Detection_Dataset/
+# Python caches
+__pycache__/
+*.pyc
+*.cache
 
-v1.mp4
+# IDE and OS files
+.vscode/
+.idea/
+.ipynb_checkpoints/

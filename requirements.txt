@@ -1,26 +1,21 @@
-# ==============================================================================
-# Traffic Violation Detection & Localization System - Dependencies
-# ==============================================================================
-
-# --- Deep Learning & Computer Vision ---
-# NOTE: For NVIDIA GPU acceleration (CUDA), install PyTorch via:
-# pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
+# Core Deep Learning Framework
 torch>=2.0.0
 torchvision>=0.15.0
 ultralytics>=8.3.0
 
-# --- Web Backend & API Server ---
-fastapi>=0.100.0
-uvicorn>=0.23.0
-python-multipart>=0.0.9
-
-# --- Image Processing & Visualization ---
-pillow>=10.0.0
+# Computer Vision & Dataset Tools
+supervision>=0.20.0
 opencv-python>=4.8.0
+pillow>=10.0.0
+pyyaml>=6.0.0
+
+# Data Science & Plotting
+pandas>=2.0.0
+numpy>=1.24.0
 matplotlib>=3.7.0
 
-# --- Data Science & Utilities ---
-numpy>=1.24.0
-pandas>=2.0.0
-pyyaml>=6.0.0
-requests>=2.31.0
+# Optional Web Dashboard (FastAPI)
+fastapi>=0.100.0
+uvicorn>=0.23.0
+python-multipart>=0.0.6
+yt-dlp>=2024.0.0

@@ -1,7 +1,0 @@
-kaggle link https://www.kaggle.com/datasets/rishabhzen/helmet-detection
-this is data set link
-
-updated source
-https://www.kaggle.com/datasets/meliodassourav/traffic-violation-dataset-v3
-
- 
