@@ -3,6 +3,7 @@ torch>=2.0.0
 torchvision>=0.15.0
 ultralytics>=8.3.0
 
+
 # Computer Vision & Dataset Tools
 supervision>=0.20.0
 opencv-python>=4.8.0
