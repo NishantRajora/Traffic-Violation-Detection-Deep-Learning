@@ -1,7 +1,6 @@
 # Dataset and Run Artifacts
 data/
 HelmetDataset/
-runs/
 output/
 
 # Pretrained Base Checkpoints
