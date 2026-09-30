@@ -1,17 +1,21 @@
 """
 ========================================================================================
-AI Traffic Guard - White Cathedral Edition
+AI Traffic Guard - White Cathedral Edition with Dynamic Model Switcher
 Real-Time Helmet Detection, Video Stream & Traffic Violation Analytics Dashboard
 ========================================================================================
 Advanced Computer Vision Web Application powered by FastAPI & YOLOv8:
   - Real-time helmet compliance and violation monitoring
+  - Dynamic Model Switcher:
+      * Switch on the fly between "My Trained Model" (best.pt - 87.5% mAP)
+      * And "Pretrained Helmet Detection Model" (helmet_detection_model.pt)
+      * Plus Base YOLOv8 foundation model (yolov8n.pt) & custom uploadable .pt weights
   - AuthKit Style: Clean White Cathedral Edition
       * Clean white canvas (#ffffff / #f8fafc) with subtle 80px blueprint grid & ambient violet halo
       * Crisp white frosted glass surfaces with subtle borders & soft elevation
       * Slate & Violet gradient wordmarks and tracked DotDigital all-caps eyebrow labels
       * Void Violet (#663af3) primary CTAs, Ember Red (#dc2626) violations, Deep Teal (#059669) compliance
       * One-click Light / Dark Mode theme toggle
-  - Features:
+  - Detection Modules:
       * Tab 1: Image Inspector (Drag & Drop, File Upload, Clipboard Paste Ctrl+V, Quick Test Gallery)
       * Tab 2: YouTube Video Inspector (Extract & Analyze frames directly from YouTube URLs)
       * Tab 3: Video File Upload Analyzer (Analyze MP4/AVI/MOV traffic video clips by timestamp)
@@ -45,20 +49,6 @@ import yt_dlp
 # --- CONFIGURATION & PATHS ---
 PROJECT_ROOT = Path(__file__).resolve().parent
 
-# Auto-locate model weights
-CANDIDATE_WEIGHTS = [
-    PROJECT_ROOT / "saved_models" / "best.pt",
-    PROJECT_ROOT / "runs" / "detect" / "train" / "weights" / "best.pt",
-    PROJECT_ROOT / "runs" / "detect" / "runs" / "detect" / "train" / "weights" / "best.pt",
-    PROJECT_ROOT / "yolov8n.pt"
-]
-
-MODEL_PATH = None
-for p in CANDIDATE_WEIGHTS:
-    if p.exists():
-        MODEL_PATH = p
-        break
-
 # Device Selection
 DEVICE = 0 if torch.cuda.is_available() else "cpu"
 DEVICE_NAME = torch.cuda.get_device_name(0) if torch.cuda.is_available() else "CPU"
@@ -69,28 +59,122 @@ SAMPLE_DIRS = [
     PROJECT_ROOT / "data" / "images"
 ]
 
-# Load YOLO Model
-model = None
-if MODEL_PATH:
-    try:
-        model = YOLO(str(MODEL_PATH))
-        print(f"🚀 Loaded Model Weights: {MODEL_PATH} on {DEVICE_NAME}")
-    except Exception as e:
-        print(f"❌ Failed to load model from {MODEL_PATH}: {e}")
-
 # Color mappings (BGR)
 # Deep Emerald/Teal #059669 -> BGR: (105, 150, 5)
 COLOR_SAFE = (105, 150, 5)
 # Vivid Red #dc2626 -> BGR: (38, 38, 220)
 COLOR_VIOLATION = (38, 38, 220)
+# Blueprint Blue #3b82f6 -> BGR: (246, 130, 59)
+COLOR_NEUTRAL = (246, 130, 59)
 COLOR_DEFAULT = (250, 228, 209)
 
 # In-memory detection history log
 DETECTION_HISTORY = []
 
+
+# ======================================================================================
+# MODEL REGISTRY & DYNAMIC MODEL SWITCHER
+# ======================================================================================
+
+def get_available_models():
+    """Scans and returns all available detection models with metadata."""
+    models = {}
+
+    # 1. Custom Trained Model (User Trained on HelmetDataset)
+    best_candidates = [
+        PROJECT_ROOT / "saved_models" / "best.pt",
+        PROJECT_ROOT / "runs" / "detect" / "train" / "weights" / "best.pt",
+        PROJECT_ROOT / "runs" / "detect" / "helmet_detect" / "weights" / "best.pt"
+    ]
+    for bp in best_candidates:
+        if bp.exists():
+            models["trained_custom"] = {
+                "id": "trained_custom",
+                "name": "My Trained Model (HelmetDataset)",
+                "filename": bp.name,
+                "path": str(bp),
+                "type": "Custom Trained",
+                "tag": "87.5% mAP [Boxes]",
+                "task": "detect",
+                "description": "Custom YOLOv8n trained on HelmetDataset (With Helmet vs Without Helmet)"
+            }
+            break
+
+    # 2. Pretrained Helmet Detection Model (True YOLOv8 Spatial Bounding Boxes)
+    pretrained_det_candidates = [
+        PROJECT_ROOT / "saved_models" / "helmet_detection_model.pt",
+        PROJECT_ROOT / "saved_models" / "traffic_violation_model.pt"
+    ]
+    for pp in pretrained_det_candidates:
+        if pp.exists():
+            models["pretrained_helmet"] = {
+                "id": "pretrained_helmet",
+                "name": "Pretrained Helmet Model",
+                "filename": pp.name,
+                "path": str(pp),
+                "type": "Pretrained Detector",
+                "tag": "YOLOv8 [Boxes]",
+                "task": "detect",
+                "description": "Pre-trained YOLOv8 safety helmet detector with spatial bounding boxes"
+            }
+            break
+
+    # 3. Base YOLOv8 Foundation Model
+    yolo_base = PROJECT_ROOT / "yolov8n.pt"
+    if yolo_base.exists():
+        models["yolov8_base"] = {
+            "id": "yolov8_base",
+            "name": "YOLOv8 Base Model (COCO)",
+            "filename": "yolov8n.pt",
+            "path": str(yolo_base),
+            "type": "Base Model",
+            "tag": "COCO 80 Cls",
+            "task": "detect",
+            "description": "Ultralytics YOLOv8 nano foundation model (80 general classes)"
+        }
+
+    # 4. Other saved weights in saved_models directory
+    saved_dir = PROJECT_ROOT / "saved_models"
+    if saved_dir.exists():
+        for p in saved_dir.glob("*.pt"):
+            if p.name not in ["best.pt", "helmet_detection_model.pt", "traffic_violation_model.pt"]:
+                mid = f"custom_{p.stem}"
+                models[mid] = {
+                    "id": mid,
+                    "name": f"Checkpoint ({p.name})",
+                    "filename": p.name,
+                    "path": str(p),
+                    "type": "Saved Checkpoint",
+                    "tag": "Local",
+                    "task": "detect",
+                    "description": f"Saved checkpoint at saved_models/{p.name}"
+                }
+
+    return models
+
+
+# Initialize Default Active Model
+models_registry = get_available_models()
+ACTIVE_MODEL_KEY = "trained_custom"
+if ACTIVE_MODEL_KEY not in models_registry and models_registry:
+    ACTIVE_MODEL_KEY = next(iter(models_registry.keys()))
+
+model = None
+ACTIVE_MODEL_NAME = "No Model Loaded"
+ACTIVE_MODEL_PATH = None
+
+if ACTIVE_MODEL_KEY in models_registry:
+    try:
+        ACTIVE_MODEL_PATH = Path(models_registry[ACTIVE_MODEL_KEY]["path"])
+        ACTIVE_MODEL_NAME = models_registry[ACTIVE_MODEL_KEY]["name"]
+        model = YOLO(str(ACTIVE_MODEL_PATH))
+        print(f"🚀 Loaded Active Model [{ACTIVE_MODEL_KEY}]: {ACTIVE_MODEL_PATH} on {DEVICE_NAME}")
+    except Exception as e:
+        print(f"❌ Failed to load model from {ACTIVE_MODEL_PATH}: {e}")
+
 app = FastAPI(
-    title="AI Traffic Guard - White Cathedral Edition",
-    version="3.1"
+    title="AI Traffic Guard - White Cathedral Edition with Dynamic Model Switcher",
+    version="3.2"
 )
 
 
@@ -98,94 +182,161 @@ app = FastAPI(
 # INFERENCE HELPER FUNCTIONS
 # ======================================================================================
 
+def classify_detection(cls_name: str):
+    """
+    Intelligently maps diverse label conventions across different models
+    into violation, safe, or neutral objects.
+    """
+    name_clean = str(cls_name).lower().replace("-", " ").replace("_", " ").strip()
+    if any(k in name_clean for k in ["without helmet", "no helmet", "violat", "barehead", "head", "overloading"]):
+        return "violation", True, "VIOLATION"
+    if any(k in name_clean for k in ["with helmet", "helmet", "safe", "compliant"]):
+        return "safe", False, "SAFE"
+    return "neutral", False, "OBJECT"
+
+
 def annotate_frame(image_bgr: np.ndarray, results, conf_threshold: float = 0.25):
     """
     Draws custom high-contrast bounding boxes, label badges, and violation HUD.
+    Gracefully handles both Object Detection models (with spatial bounding boxes)
+    and Classification models (with full-frame HUD & probability badges).
     """
     annotated = image_bgr.copy()
     h, w = annotated.shape[:2]
 
-    stats = {"With Helmet": 0, "Without Helmet": 0}
+    stats = {"With Helmet": 0, "Without Helmet": 0, "Other": 0}
     detections = []
 
     for r in results:
-        boxes = r.boxes
-        if boxes is None or len(boxes) == 0:
-            continue
+        boxes = getattr(r, "boxes", None)
 
-        for i, box in enumerate(boxes):
-            conf = float(box.conf[0])
-            if conf < conf_threshold:
-                continue
+        # 1. Detection Model Mode (Spatial Bounding Boxes)
+        if boxes is not None and len(boxes) > 0:
+            for i, box in enumerate(boxes):
+                conf = float(box.conf[0])
+                if conf < conf_threshold:
+                    continue
 
-            cls_id = int(box.cls[0])
-            cls_name = r.names.get(cls_id, str(cls_id))
+                cls_id = int(box.cls[0])
+                raw_name = r.names.get(cls_id, str(cls_id)) if hasattr(r, "names") else str(cls_id)
+                cls_name = str(raw_name).strip()
 
-            x1, y1, x2, y2 = map(int, box.xyxy[0])
-            x1, y1 = max(0, x1), max(0, y1)
-            x2, y2 = min(w, x2), min(h, y2)
+                x1, y1, x2, y2 = map(int, box.xyxy[0])
+                x1, y1 = max(0, x1), max(0, y1)
+                x2, y2 = min(w, x2), min(h, y2)
 
-            is_violation = (cls_name.lower() == "without helmet")
+                det_type, is_violation, status_text = classify_detection(cls_name)
+
+                if det_type == "violation":
+                    color = COLOR_VIOLATION
+                    stats["Without Helmet"] += 1
+                elif det_type == "safe":
+                    color = COLOR_SAFE
+                    stats["With Helmet"] += 1
+                else:
+                    color = COLOR_NEUTRAL
+                    stats["Other"] += 1
+
+                detections.append({
+                    "id": len(detections) + 1,
+                    "class": cls_name,
+                    "confidence": round(conf * 100, 1),
+                    "is_violation": is_violation,
+                    "status_text": status_text,
+                    "box": [x1, y1, x2, y2],
+                    "width": x2 - x1,
+                    "height": y2 - y1
+                })
+
+                # Bounding Box with sleek hairline & corner brackets
+                thickness = max(2, int(min(w, h) / 360))
+                cv2.rectangle(annotated, (x1, y1), (x2, y2), color, thickness)
+
+                # High-tech corner brackets
+                c_len = max(10, int(min(x2 - x1, y2 - y1) * 0.22))
+                c_thick = thickness + 2
+                cv2.line(annotated, (x1, y1), (x1 + c_len, y1), color, c_thick)
+                cv2.line(annotated, (x1, y1), (x1, y1 + c_len), color, c_thick)
+                cv2.line(annotated, (x2, y1), (x2 - c_len, y1), color, c_thick)
+                cv2.line(annotated, (x2, y1), (x2, y1 + c_len), color, c_thick)
+                cv2.line(annotated, (x1, y2), (x1 + c_len, y2), color, c_thick)
+                cv2.line(annotated, (x1, y2), (x1, y2 - c_len), color, c_thick)
+                cv2.line(annotated, (x2, y2), (x2 - c_len, y2), color, c_thick)
+                cv2.line(annotated, (x2, y2), (x2, y2 - c_len), color, c_thick)
+
+                # Frosted Tag with high-visibility styling
+                label_text = f" {cls_name.upper()}  {conf * 100:.1f}% "
+                font_scale = max(0.45, min(w, h) / 1050)
+                (lw, lh), _ = cv2.getTextSize(label_text, cv2.FONT_HERSHEY_SIMPLEX, font_scale, 1)
+                y_tag = max(0, y1 - lh - 10)
+
+                # Badge background with frosted accent
+                cv2.rectangle(annotated, (x1, y_tag), (x1 + lw + 6, y_tag + lh + 10), (15, 10, 5), -1)
+                cv2.rectangle(annotated, (x1, y_tag), (x1 + lw + 6, y_tag + lh + 10), color, 1)
+                cv2.putText(
+                    annotated,
+                    label_text,
+                    (x1 + 3, y_tag + lh + 4),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    font_scale,
+                    (255, 255, 255),
+                    1,
+                    cv2.LINE_AA
+                )
+
+        # 2. Classification Model Mode (Whole Frame HUD)
+        elif hasattr(r, "probs") and r.probs is not None:
+            top_id = int(r.probs.top1)
+            top_conf = float(r.probs.top1conf)
+            raw_name = r.names.get(top_id, str(top_id)) if hasattr(r, "names") else str(top_id)
+            cls_name = str(raw_name).strip()
+
+            det_type, is_violation, status_text = classify_detection(cls_name)
             color = COLOR_VIOLATION if is_violation else COLOR_SAFE
-            stats[cls_name] = stats.get(cls_name, 0) + 1
+
+            if det_type == "violation":
+                stats["Without Helmet"] += 1
+            elif det_type == "safe":
+                stats["With Helmet"] += 1
+            else:
+                stats["Other"] += 1
 
             detections.append({
-                "id": i + 1,
-                "class": cls_name,
-                "confidence": round(conf * 100, 1),
+                "id": 1,
+                "class": f"{cls_name} (Classification)",
+                "confidence": round(top_conf * 100, 1),
                 "is_violation": is_violation,
-                "box": [x1, y1, x2, y2],
-                "width": x2 - x1,
-                "height": y2 - y1
+                "status_text": f"CLASSIFIED: {status_text}",
+                "box": [0, 0, w, h],
+                "width": w,
+                "height": h
             })
 
-            # Bounding Box with sleek hairline & corner brackets
-            thickness = max(2, int(min(w, h) / 360))
-            cv2.rectangle(annotated, (x1, y1), (x2, y2), color, thickness)
+            # Full-frame HUD border indicating classification state
+            cv2.rectangle(annotated, (0, 0), (w - 1, h - 1), color, 6)
 
-            # High-tech corner brackets
-            c_len = max(10, int(min(x2 - x1, y2 - y1) * 0.22))
-            c_thick = thickness + 2
-            cv2.line(annotated, (x1, y1), (x1 + c_len, y1), color, c_thick)
-            cv2.line(annotated, (x1, y1), (x1, y1 + c_len), color, c_thick)
-            cv2.line(annotated, (x2, y1), (x2 - c_len, y1), color, c_thick)
-            cv2.line(annotated, (x2, y1), (x2, y1 + c_len), color, c_thick)
-            cv2.line(annotated, (x1, y2), (x1 + c_len, y2), color, c_thick)
-            cv2.line(annotated, (x1, y2), (x1, y2 - c_len), color, c_thick)
-            cv2.line(annotated, (x2, y2), (x2 - c_len, y2), color, c_thick)
-            cv2.line(annotated, (x2, y2), (x2, y2 - c_len), color, c_thick)
-
-            # Frosted Tag with high-visibility styling
-            label_text = f" {cls_name.upper()}  {conf * 100:.1f}% "
-            font_scale = max(0.45, min(w, h) / 1050)
-            (lw, lh), _ = cv2.getTextSize(label_text, cv2.FONT_HERSHEY_SIMPLEX, font_scale, 1)
-            y_tag = max(0, y1 - lh - 10)
-
-            # Badge background with frosted accent
-            cv2.rectangle(annotated, (x1, y_tag), (x1 + lw + 6, y_tag + lh + 10), (15, 10, 5), -1)
-            cv2.rectangle(annotated, (x1, y_tag), (x1 + lw + 6, y_tag + lh + 10), color, 1)
-            cv2.putText(
-                annotated,
-                label_text,
-                (x1 + 3, y_tag + lh + 4),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                font_scale,
-                (255, 255, 255),
-                1,
-                cv2.LINE_AA
-            )
+            # Central/bottom HUD Badge for classification
+            hud_text = f" CLASSIFICATION: {cls_name.upper()} ({top_conf * 100:.1f}%) "
+            (tw, th), _ = cv2.getTextSize(hud_text, cv2.FONT_HERSHEY_SIMPLEX, 0.70, 2)
+            y_box = h - th - 30
+            x_box = max(20, (w - tw) // 2)
+            cv2.rectangle(annotated, (x_box - 10, y_box - 10), (x_box + tw + 10, y_box + th + 14), (15, 10, 5), -1)
+            cv2.rectangle(annotated, (x_box - 10, y_box - 10), (x_box + tw + 10, y_box + th + 14), color, 2)
+            cv2.putText(annotated, hud_text, (x_box, y_box + th), cv2.FONT_HERSHEY_SIMPLEX, 0.70, (255, 255, 255), 2, cv2.LINE_AA)
 
     # Top Violation Status Banner
-    has_violations = stats.get("Without Helmet", 0) > 0
     safe_count = stats.get("With Helmet", 0)
     viol_count = stats.get("Without Helmet", 0)
+    other_count = stats.get("Other", 0)
+    has_violations = viol_count > 0
     total_count = safe_count + viol_count
 
     banner_bg = (15, 10, 5)
     banner_accent = COLOR_VIOLATION if has_violations else COLOR_SAFE
-    banner_text = f" VIOLATIONS: {viol_count}  |  SAFE (HELMET): {safe_count}  |  TOTAL: {total_count} "
+    model_tag = f"[{ACTIVE_MODEL_NAME}]"
+    banner_text = f" {model_tag}  VIOLATIONS: {viol_count} | SAFE: {safe_count} | TOTAL: {total_count} "
 
-    (bw, bh), _ = cv2.getTextSize(banner_text, cv2.FONT_HERSHEY_SIMPLEX, 0.65, 2)
+    (bw, bh), _ = cv2.getTextSize(banner_text, cv2.FONT_HERSHEY_SIMPLEX, 0.60, 2)
     overlay = annotated.copy()
     cv2.rectangle(overlay, (0, 0), (w, bh + 24), banner_bg, -1)
     cv2.addWeighted(overlay, 0.85, annotated, 0.15, 0, annotated)
@@ -196,7 +347,7 @@ def annotate_frame(image_bgr: np.ndarray, results, conf_threshold: float = 0.25)
         banner_text,
         (16, bh + 15),
         cv2.FONT_HERSHEY_SIMPLEX,
-        0.65,
+        0.60,
         (240, 245, 255),
         2,
         cv2.LINE_AA
@@ -206,9 +357,9 @@ def annotate_frame(image_bgr: np.ndarray, results, conf_threshold: float = 0.25)
 
 
 def run_pipeline(img_bgr: np.ndarray, conf: float = 0.25, iou: float = 0.45, source_label: str = "Image"):
-    """Executes YOLOv8 detection pipeline and packages response."""
+    """Executes YOLO detection pipeline and packages response."""
     if model is None:
-        raise RuntimeError("YOLO model is not initialized on the server.")
+        raise RuntimeError("No YOLO model is currently loaded on the server.")
 
     t0 = time.time()
     results = model.predict(img_bgr, conf=conf, iou=iou, device=DEVICE, verbose=False)[0]
@@ -218,6 +369,7 @@ def run_pipeline(img_bgr: np.ndarray, conf: float = 0.25, iou: float = 0.45, sou
 
     safe_count = stats.get("With Helmet", 0)
     viol_count = stats.get("Without Helmet", 0)
+    other_count = stats.get("Other", 0)
     total_riders = safe_count + viol_count
     compliance = round((safe_count / total_riders * 100), 1) if total_riders > 0 else 100.0
 
@@ -231,8 +383,11 @@ def run_pipeline(img_bgr: np.ndarray, conf: float = 0.25, iou: float = 0.45, sou
     response_data = {
         "success": True,
         "source": source_label,
+        "model_id": ACTIVE_MODEL_KEY,
+        "model_name": ACTIVE_MODEL_NAME,
         "with_helmet": safe_count,
         "without_helmet": viol_count,
+        "other_objects": other_count,
         "total_riders": total_riders,
         "compliance_rate": compliance,
         "violation": viol_count > 0,
@@ -248,6 +403,7 @@ def run_pipeline(img_bgr: np.ndarray, conf: float = 0.25, iou: float = 0.45, sou
     DETECTION_HISTORY.insert(0, {
         "id": len(DETECTION_HISTORY) + 1,
         "source": source_label,
+        "model": ACTIVE_MODEL_NAME,
         "timestamp": response_data["timestamp"],
         "safe": safe_count,
         "violations": viol_count,
@@ -296,7 +452,6 @@ def extract_youtube_frame(youtube_url: str, timestamp_sec: float = 0.0):
         cap.release()
 
         if not ret or frame is None:
-            # Fallback to high-res thumbnail if stream frame read fails
             if thumbnail:
                 req = urllib.request.Request(thumbnail, headers={'User-Agent': 'Mozilla/5.0'})
                 with urllib.request.urlopen(req, timeout=10) as resp:
@@ -310,7 +465,7 @@ def extract_youtube_frame(youtube_url: str, timestamp_sec: float = 0.0):
 
 
 # ======================================================================================
-# FRONTEND (HTML + CSS + JS) - CLEAN WHITE CATHEDRAL EDITION
+# FRONTEND (HTML + CSS + JS) - WHITE CATHEDRAL WITH DYNAMIC MODEL SWITCHER
 # ======================================================================================
 
 HTML_CONTENT = """<!DOCTYPE html>
@@ -464,6 +619,20 @@ HTML_CONTENT = """<!DOCTYPE html>
             transition: background-color 0.3s ease, border-color 0.3s ease;
         }
 
+        /* Model Switcher Card */
+        .model-switcher-card {
+            border-radius: 14px;
+            border: 1.5px solid var(--color-border);
+            background: var(--color-surface-subtle);
+            padding: 12px 14px;
+            transition: all 0.25s ease;
+        }
+        .model-switcher-card.active {
+            border-color: var(--color-void-violet);
+            background: rgba(102, 58, 243, 0.05);
+            box-shadow: 0 4px 14px rgba(102, 58, 243, 0.12);
+        }
+
         /* Buttons */
         .btn-void-violet {
             background: var(--color-void-violet);
@@ -518,6 +687,12 @@ HTML_CONTENT = """<!DOCTYPE html>
             color: var(--color-deep-teal);
             border-color: rgba(5, 150, 105, 0.35);
             background: rgba(5, 150, 105, 0.1);
+        }
+        .auth-badge.badge-model {
+            background: rgba(102, 58, 243, 0.1);
+            color: var(--color-void-violet);
+            border-color: rgba(102, 58, 243, 0.3);
+            font-weight: 600;
         }
 
         /* Navigation Tab Pills */
@@ -724,7 +899,7 @@ HTML_CONTENT = """<!DOCTYPE html>
 <body>
 
     <!-- ==========================================================================
-         TOP NAVIGATION BAR
+         TOP NAVIGATION BAR WITH DYNAMIC MODEL SWITCHER
          ========================================================================== -->
     <nav class="navbar navbar-expand-lg cathedral-nav px-4 py-2">
         <div class="container-fluid">
@@ -732,21 +907,33 @@ HTML_CONTENT = """<!DOCTYPE html>
                 <i class="fas fa-shield-halved fs-3" style="color: var(--color-void-violet);"></i>
                 <div>
                     <span class="brand-wordmark">AUTHKIT GUARD</span>
-                    <span class="d-block eyebrow-label" style="font-size: 0.62rem;">REAL-TIME VIOLATION ENGINE &bull; YOLOV8</span>
+                    <span class="d-block eyebrow-label" style="font-size: 0.62rem;">TRAFFIC SAFETY &bull; MULTI-MODEL ENGINE</span>
                 </div>
             </a>
 
-            <!-- System Spec Badges & Controls -->
+            <!-- System Spec Badges, Model Selector & Controls -->
             <div class="d-flex align-items-center gap-2">
+                
+                <!-- Quick Model Switcher Dropdown in Navbar -->
+                <div class="dropdown">
+                    <button class="btn-ghost-pill btn-sm dropdown-toggle d-flex align-items-center gap-2" type="button" id="modelDropdownBtn" data-bs-toggle="dropdown" aria-expanded="false" style="border: 1px solid var(--color-void-violet); background: var(--color-surface);">
+                        <i class="fas fa-cube text-primary"></i>
+                        <span id="nav-active-model-name" class="fw-semibold">Loading Models...</span>
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end shadow-lg p-2" id="nav-model-menu" style="min-width: 320px; border-radius: 12px; border: 1px solid var(--color-border); background: var(--color-surface);">
+                        <li><span class="dropdown-item-text small text-muted">Select Detection Model:</span></li>
+                        <div id="nav-model-options"></div>
+                    </ul>
+                </div>
+
                 <span class="auth-badge live-teal" id="nav-device-badge">
                     <i class="fas fa-microchip me-1"></i> <span id="nav-device">ACCELERATION ACTIVE</span>
                 </span>
-                <span class="auth-badge">
-                    <i class="fas fa-cube me-1"></i> YOLOv8n (2 Classes)
-                </span>
+                
                 <button class="btn-ghost-pill btn-sm" onclick="toggleAudioAlert()" id="btn-audio">
                     <i class="fas fa-volume-high me-1"></i> Sound: ON
                 </button>
+                
                 <!-- Theme Toggle Button -->
                 <button class="btn-ghost-pill btn-sm" onclick="toggleTheme()" id="btn-theme" title="Toggle Light / Dark Mode">
                     <i class="fas fa-moon me-1"></i> Dark Mode
@@ -802,16 +989,45 @@ HTML_CONTENT = """<!DOCTYPE html>
         <div class="tab-content" id="dashboardTabContent">
 
             <!-- ------------------------------------------------------------------
-                 TAB 1: IMAGE INSPECTOR
+                 TAB 1: IMAGE INSPECTOR & CONTROLS
                  ------------------------------------------------------------------ -->
             <div class="tab-pane fade show active" id="tab-image" role="tabpanel">
                 <div class="row g-4">
                     <!-- Left Config Controls -->
                     <div class="col-lg-5">
                         <div class="glass-plate p-4 h-100">
+                            
+                            <!-- MODEL SWITCHER PANEL -->
+                            <div class="mb-4">
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <span class="eyebrow-label"><i class="fas fa-layer-group me-1"></i> Active Detection Model</span>
+                                    <span class="auth-badge badge-model" id="active-model-tag">Loading...</span>
+                                </div>
+                                <div class="model-switcher-card active mb-2" id="active-model-summary">
+                                    <div class="d-flex justify-content-between align-items-start">
+                                        <div>
+                                            <div class="fw-bold" style="color: var(--color-text-primary);" id="card-active-model-name">My Trained Model</div>
+                                            <div class="small text-muted" id="card-active-model-desc">Trained on HelmetDataset (With Helmet vs Without Helmet)</div>
+                                        </div>
+                                        <span class="badge bg-success small">Active</span>
+                                    </div>
+                                    <div class="mt-2 pt-2 border-top small d-flex justify-content-between text-muted font-monospace">
+                                        <span>Classes: <b id="card-active-model-classes">2</b></span>
+                                        <span>File: <b id="card-active-model-file">best.pt</b></span>
+                                    </div>
+                                </div>
+
+                                <!-- Model Selection Buttons -->
+                                <div class="d-flex flex-column gap-2" id="model-buttons-container">
+                                    <!-- Rendered dynamically -->
+                                </div>
+                            </div>
+
+                            <hr style="border-color: var(--color-border); opacity: 0.7;">
+
                             <div class="d-flex justify-content-between align-items-center mb-3">
                                 <span class="eyebrow-label"><i class="fas fa-sliders me-1"></i> Detection Parameters</span>
-                                <span class="auth-badge">YOLOv8</span>
+                                <span class="auth-badge">Thresholds</span>
                             </div>
 
                             <!-- Drop Zone -->
@@ -947,7 +1163,7 @@ HTML_CONTENT = """<!DOCTYPE html>
                                                 <th>Classification</th>
                                                 <th>Confidence</th>
                                                 <th>Bounding Box [x1, y1, x2, y2]</th>
-                                                <th>Compliance</th>
+                                                <th>Status</th>
                                             </tr>
                                         </thead>
                                         <tbody id="detections-tbody"></tbody>
@@ -973,7 +1189,7 @@ HTML_CONTENT = """<!DOCTYPE html>
                     </div>
 
                     <p class="small mb-4" style="color: var(--color-text-muted);">
-                        Extracts high-resolution video frames directly from any YouTube traffic or road surveillance clip and executes instant YOLOv8 helmet detection.
+                        Extracts high-resolution video frames directly from any YouTube traffic or road surveillance clip and executes instant helmet detection using the active model.
                     </p>
 
                     <div class="row g-3 mb-4">
@@ -1097,7 +1313,7 @@ HTML_CONTENT = """<!DOCTYPE html>
                         <button class="btn-void-violet px-4" onclick="analyzeUrl()">Analyze Link</button>
                     </div>
                     <div class="small" style="color: var(--color-text-muted);">
-                        <i class="fas fa-info-circle me-1"></i> Downloads the remote camera image directly into server RAM and processes it through the YOLOv8 pipeline.
+                        <i class="fas fa-info-circle me-1"></i> Downloads the remote camera image directly into server RAM and processes it through the active YOLO model.
                     </div>
                 </div>
             </div>
@@ -1123,10 +1339,11 @@ HTML_CONTENT = """<!DOCTYPE html>
                             <thead>
                                 <tr>
                                     <th>ID</th>
+                                    <th>Model</th>
                                     <th>Source</th>
                                     <th>Timestamp</th>
                                     <th>Thumbnail</th>
-                                    <th>Safe Riders</th>
+                                    <th>Safe</th>
                                     <th>Violations</th>
                                     <th>Compliance</th>
                                     <th>Status</th>
@@ -1135,7 +1352,7 @@ HTML_CONTENT = """<!DOCTYPE html>
                             </thead>
                             <tbody id="history-tbody">
                                 <tr>
-                                    <td colspan="9" class="text-center py-4" style="color: var(--color-text-muted);">No scans recorded yet in this session.</td>
+                                    <td colspan="10" class="text-center py-4" style="color: var(--color-text-muted);">No scans recorded yet in this session.</td>
                                 </tr>
                             </tbody>
                         </table>
@@ -1163,10 +1380,13 @@ HTML_CONTENT = """<!DOCTYPE html>
         let isWebcamRunning = false;
         let webcamStream = null;
         let webcamInterval = null;
+        let availableModels = [];
+        let activeModelId = '';
 
         // Initialize on DOM load
         document.addEventListener('DOMContentLoaded', () => {
             fetchSystemInfo();
+            fetchAvailableModels();
             loadSampleGallery();
             setupDragAndDrop();
             setupClipboardPaste();
@@ -1198,12 +1418,131 @@ HTML_CONTENT = """<!DOCTYPE html>
             }
         }
 
+        // =====================================================================
+        // MODEL SWITCHER LOGIC
+        // =====================================================================
+        async function fetchAvailableModels() {
+            try {
+                const res = await fetch('/get_models');
+                const data = await res.json();
+                availableModels = data.models || [];
+                activeModelId = data.active_model_id;
+                renderModelSwitcher(data.models, data.active_model_id, data.active_model);
+            } catch(e) {
+                console.error('Failed to load models:', e);
+            }
+        }
+
+        function renderModelSwitcher(models, activeId, activeModel) {
+            // Update Nav Dropdown Button
+            const navName = document.getElementById('nav-active-model-name');
+            if (activeModel && activeModel.name) {
+                navName.innerText = activeModel.name;
+            }
+
+            // Update Nav Dropdown Options
+            const navOptionsContainer = document.getElementById('nav-model-options');
+            navOptionsContainer.innerHTML = '';
+
+            // Update Left Controls Panel
+            const buttonsContainer = document.getElementById('model-buttons-container');
+            buttonsContainer.innerHTML = '';
+
+            if (activeModel) {
+                document.getElementById('card-active-model-name').innerText = activeModel.name;
+                document.getElementById('card-active-model-desc').innerText = activeModel.description;
+                document.getElementById('card-active-model-file').innerText = activeModel.filename;
+                document.getElementById('active-model-tag').innerText = activeModel.tag || 'Active';
+            }
+
+            models.forEach(m => {
+                const isActive = (m.id === activeId);
+
+                // 1. Add to Nav Dropdown
+                const li = document.createElement('li');
+                li.innerHTML = `
+                    <a class="dropdown-item d-flex justify-content-between align-items-center py-2 ${isActive ? 'active bg-primary text-white' : ''}" 
+                       href="javascript:void(0)" onclick="switchModel('${m.id}')" style="border-radius: 8px;">
+                        <div>
+                            <div class="fw-bold">${m.name}</div>
+                            <small class="${isActive ? 'text-white-50' : 'text-muted'}">${m.type} &bull; ${m.filename}</small>
+                        </div>
+                        ${isActive ? '<i class="fas fa-check-circle ms-2"></i>' : `<span class="badge bg-secondary ms-2">${m.tag}</span>`}
+                    </a>
+                `;
+                navOptionsContainer.appendChild(li);
+
+                // 2. Add to Tab 1 Control Card Switch Buttons
+                const btnCard = document.createElement('div');
+                btnCard.className = `p-2 rounded d-flex justify-content-between align-items-center ${isActive ? 'border border-primary bg-light' : 'border'}`;
+                btnCard.style.cursor = 'pointer';
+                btnCard.style.transition = 'all 0.2s';
+                btnCard.onclick = () => switchModel(m.id);
+                btnCard.innerHTML = `
+                    <div class="d-flex align-items-center gap-2">
+                        <i class="fas ${m.id === 'trained_custom' ? 'fa-medal text-warning' : (m.id === 'pretrained_helmet' ? 'fa-shield-halved text-success' : 'fa-cube text-primary')}"></i>
+                        <div>
+                            <div class="fw-semibold small" style="color: var(--color-text-primary);">${m.name}</div>
+                            <div class="text-muted font-monospace" style="font-size: 0.65rem;">${m.filename}</div>
+                        </div>
+                    </div>
+                    <div>
+                        ${isActive ? '<span class="badge bg-primary">Active</span>' : '<button class="btn btn-xs btn-outline-primary rounded-pill px-2 py-1" style="font-size: 0.72rem;">Switch</button>'}
+                    </div>
+                `;
+                buttonsContainer.appendChild(btnCard);
+            });
+        }
+
+        async function switchModel(modelId) {
+            if (modelId === activeModelId) return;
+
+            const navName = document.getElementById('nav-active-model-name');
+            navName.innerText = 'Switching Model...';
+
+            try {
+                const res = await fetch('/switch_model', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ model_id: modelId })
+                });
+                const data = await res.json();
+
+                if (data.error) {
+                    alert('Failed to switch model: ' + data.error);
+                    return;
+                }
+
+                activeModelId = data.active_model_id;
+                document.getElementById('card-active-model-classes').innerText = (data.classes || []).length;
+                
+                // Re-fetch model registry to refresh badges and active labels
+                await fetchAvailableModels();
+
+                // Alert pill feedback
+                const pill = document.getElementById('status-pill');
+                pill.className = 'cathedral-status-pill safe';
+                pill.innerHTML = `<i class="fas fa-check-circle"></i> ACTIVATED: ${data.active_model_name}`;
+
+                // If an image or file is currently loaded, re-run prediction with new model
+                if (currentFile) {
+                    handleFileUpload(currentFile);
+                }
+
+            } catch(e) {
+                alert('Model switch error: ' + e.message);
+            }
+        }
+
         // 1. Fetch System Metadata
         async function fetchSystemInfo() {
             try {
                 const res = await fetch('/system_info');
                 const data = await res.json();
                 document.getElementById('nav-device').innerText = data.device_name;
+                if (data.classes) {
+                    document.getElementById('card-active-model-classes').innerText = data.classes.length;
+                }
             } catch(e) {
                 document.getElementById('nav-device').innerText = 'Online';
             }
@@ -1322,14 +1661,12 @@ HTML_CONTENT = """<!DOCTYPE html>
                     return;
                 }
 
-                // Show metadata card
                 if (data.youtube_info) {
                     document.getElementById('yt-info-card').style.display = 'block';
                     document.getElementById('yt-meta-title').innerText = data.youtube_info.title;
                     document.getElementById('yt-meta-time').innerText = `At ${timestamp}s / ${data.youtube_info.duration}s`;
                 }
 
-                // Switch to Image Inspector tab to view results
                 document.getElementById('tab-image-btn').click();
                 currentResult = data;
                 renderDetectionResults(data);
@@ -1431,11 +1768,11 @@ HTML_CONTENT = """<!DOCTYPE html>
             const pill = document.getElementById('status-pill');
             if (data.violation) {
                 pill.className = 'cathedral-status-pill violation';
-                pill.innerHTML = `<i class="fas fa-triangle-exclamation"></i> ${data.without_helmet} VIOLATION(S) DETECTED`;
+                pill.innerHTML = `<i class="fas fa-triangle-exclamation"></i> ${data.without_helmet} VIOLATION(S) DETECTED [${data.model_name || 'Active Model'}]`;
                 if (audioEnabled) playAlertChime();
             } else {
                 pill.className = 'cathedral-status-pill safe';
-                pill.innerHTML = `<i class="fas fa-shield-check"></i> 100% COMPLIANT &bull; ALL RIDERS SAFE`;
+                pill.innerHTML = `<i class="fas fa-shield-check"></i> 100% COMPLIANT &bull; ALL RIDERS SAFE [${data.model_name || 'Active Model'}]`;
             }
 
             // Image display update
@@ -1447,7 +1784,7 @@ HTML_CONTENT = """<!DOCTYPE html>
             document.getElementById('objects-count-badge').innerText = `${data.detections.length} objects`;
 
             if (data.detections.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="5" class="text-center py-2" style="color: var(--color-text-muted);">No riders detected at current threshold.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="5" class="text-center py-2" style="color: var(--color-text-muted);">No objects detected at current threshold.</td></tr>';
             } else {
                 data.detections.forEach(d => {
                     const tr = document.createElement('tr');
@@ -1467,7 +1804,7 @@ HTML_CONTENT = """<!DOCTYPE html>
                             </div>
                         </td>
                         <td class="font-monospace small" style="color: var(--color-text-muted);">[${d.box.join(', ')}]</td>
-                        <td><span class="auth-badge" style="${badgeBg}">${isViol ? 'VIOLATION' : 'SAFE'}</span></td>
+                        <td><span class="auth-badge" style="${badgeBg}">${d.status_text || (isViol ? 'VIOLATION' : 'SAFE')}</span></td>
                     `;
                     tbody.appendChild(tr);
                 });
@@ -1544,7 +1881,7 @@ HTML_CONTENT = """<!DOCTYPE html>
                 const res = await fetch('/detection_history');
                 const data = await res.json();
                 if (!data.history || data.history.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="9" class="text-center py-4" style="color: var(--color-text-muted);">No scans recorded yet in this session.</td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="10" class="text-center py-4" style="color: var(--color-text-muted);">No scans recorded yet in this session.</td></tr>';
                     return;
                 }
                 tbody.innerHTML = '';
@@ -1554,6 +1891,7 @@ HTML_CONTENT = """<!DOCTYPE html>
                     const badgeBg = isViol ? 'background: rgba(220, 38, 38, 0.1); border: 1px solid var(--color-ember-glow); color: var(--color-ember-glow);' : 'background: rgba(5, 150, 105, 0.1); border: 1px solid var(--color-deep-teal); color: var(--color-deep-teal);';
                     tr.innerHTML = `
                         <td class="font-monospace" style="color: var(--color-text-muted);">${item.id}</td>
+                        <td class="small fw-semibold">${item.model || 'YOLOv8'}</td>
                         <td class="eyebrow-label">${item.source || 'Scan'}</td>
                         <td class="font-monospace small" style="color: var(--color-text-muted);">${item.timestamp}</td>
                         <td><img src="${item.thumbnail}" style="width: 48px; height: 34px; object-fit: cover; border-radius: 4px; border: 1px solid var(--color-border);"></td>
@@ -1662,19 +2000,73 @@ HTML_CONTENT = """<!DOCTYPE html>
 
 @app.get("/", response_class=HTMLResponse)
 async def index():
-    """Serves the White Cathedral Edition UI."""
+    """Serves the White Cathedral Edition UI with Dynamic Model Switcher."""
     return HTML_CONTENT
 
 
 @app.get("/system_info")
 async def system_info():
-    """Returns runtime hardware and model metadata."""
+    """Returns runtime hardware, active model, and metadata."""
+    classes = []
+    if model is not None and hasattr(model, "names"):
+        classes = [str(c).strip() for c in model.names.values()]
+
     return {
         "device_name": f"{DEVICE_NAME} Acceleration",
         "device_type": str(DEVICE),
         "model_loaded": model is not None,
-        "classes": list(model.names.values()) if model else ["With Helmet", "Without Helmet"]
+        "active_model_id": ACTIVE_MODEL_KEY,
+        "active_model_name": ACTIVE_MODEL_NAME,
+        "classes": classes
     }
+
+
+@app.get("/get_models")
+async def list_models():
+    """Returns all discoverable detection models and current active model."""
+    models_dict = get_available_models()
+    return {
+        "models": list(models_dict.values()),
+        "active_model_id": ACTIVE_MODEL_KEY,
+        "active_model": models_dict.get(ACTIVE_MODEL_KEY, {})
+    }
+
+
+@app.post("/switch_model")
+async def switch_model(payload: dict = Body(...)):
+    """Dynamically activates a selected model in memory without server restart."""
+    global model, ACTIVE_MODEL_KEY, ACTIVE_MODEL_NAME, ACTIVE_MODEL_PATH
+    model_id = payload.get("model_id")
+    models_dict = get_available_models()
+
+    if not model_id or model_id not in models_dict:
+        return JSONResponse(status_code=404, content={"error": f"Model '{model_id}' is not available."})
+
+    target = models_dict[model_id]
+    target_path = Path(target["path"])
+
+    if not target_path.exists():
+        return JSONResponse(status_code=404, content={"error": f"Model file not found on disk at {target_path}."})
+
+    try:
+        new_model = YOLO(str(target_path))
+        model = new_model
+        ACTIVE_MODEL_KEY = model_id
+        ACTIVE_MODEL_NAME = target["name"]
+        ACTIVE_MODEL_PATH = target_path
+        classes = [str(c).strip() for c in model.names.values()] if hasattr(model, "names") else []
+        print(f"🔄 Switched Active Model to: {ACTIVE_MODEL_NAME} ({target_path})")
+
+        return {
+            "success": True,
+            "message": f"Successfully activated: {target['name']}",
+            "active_model_id": model_id,
+            "active_model_name": target["name"],
+            "classes": classes,
+            "device": DEVICE_NAME
+        }
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": f"Failed to activate model: {str(e)}"})
 
 
 @app.get("/sample_images")
@@ -1689,7 +2081,6 @@ async def get_sample_images():
     if not found_images:
         return {"samples": []}
 
-    # Pick 8 diverse samples
     selected = found_images[:8]
     samples_data = []
 
@@ -1772,7 +2163,7 @@ async def predict_url(payload: dict = Body(...)):
 
 @app.post("/predict_youtube")
 async def predict_youtube(payload: dict = Body(...)):
-    """Extracts a frame from YouTube video URL and executes YOLOv8 detection."""
+    """Extracts a frame from YouTube video URL and executes YOLO detection."""
     url = payload.get("url", "").strip()
     timestamp_sec = float(payload.get("timestamp", 0.0))
     conf = float(payload.get("conf", 0.25))
@@ -1887,9 +2278,9 @@ async def clear_history():
 @app.get("/export_history_csv")
 async def export_history_csv():
     """Exports session incident log as CSV."""
-    lines = ["ID,Source,Timestamp,Safe_Count,Violations_Count,Total_Riders,Compliance_Percent,Status,Latency_ms"]
+    lines = ["ID,Model,Source,Timestamp,Safe_Count,Violations_Count,Total_Riders,Compliance_Percent,Status,Latency_ms"]
     for h in DETECTION_HISTORY:
-        lines.append(f"{h['id']},{h.get('source', 'Scan')},{h['timestamp']},{h['safe']},{h['violations']},{h['total']},{h['compliance']},{h['status']},{h['latency_ms']}")
+        lines.append(f"{h['id']},{h.get('model', 'YOLOv8')},{h.get('source', 'Scan')},{h['timestamp']},{h['safe']},{h['violations']},{h['total']},{h['compliance']},{h['status']},{h['latency_ms']}")
 
     csv_data = "\n".join(lines)
     return Response(
@@ -1907,8 +2298,9 @@ if __name__ == "__main__":
     print("\n" + "=" * 65)
     print("🚦 AI TRAFFIC GUARD — WHITE CATHEDRAL EDITION LAUNCHER")
     print("=" * 65)
-    print(f"Device    : {DEVICE_NAME}")
-    print(f"Weights   : {MODEL_PATH}")
-    print(f"Server URL: http://127.0.0.1:8000")
+    print(f"Device       : {DEVICE_NAME}")
+    print(f"Active Model : {ACTIVE_MODEL_NAME}")
+    print(f"Weights Path : {ACTIVE_MODEL_PATH}")
+    print(f"Server URL   : http://127.0.0.1:8000")
     print("=" * 65 + "\n")
     uvicorn.run(app, host="0.0.0.0", port=8000)
