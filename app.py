@@ -15,15 +15,13 @@ Advanced Computer Vision Web Application powered by FastAPI & YOLOv8:
       * Slate & Violet gradient wordmarks and tracked DotDigital all-caps eyebrow labels
       * Void Violet (#663af3) primary CTAs, Ember Red (#dc2626) violations, Deep Teal (#059669) compliance
       * One-click Light / Dark Mode theme toggle
-  - Detection Modules:
-      * Tab 1: Image Inspector (Drag & Drop, File Upload, Clipboard Paste Ctrl+V, Quick Test Gallery)
-      * Tab 2: YouTube Video Inspector (Extract & Analyze frames directly from YouTube URLs)
-      * Tab 3: Video File Upload Analyzer (Analyze MP4/AVI/MOV traffic video clips by timestamp)
-      * Tab 4: Live WebCam Stream HUD (Real-time video feed streaming to YOLOv8 with FPS counter)
-      * Tab 5: Direct Image URL Stream Analyzer
-      * Tab 6: Incident Analytics & Session Log with CSV/JSON Export & Historical Telemetry
-      * Side-by-Side (Original vs Annotated) and full telemetry breakdown table
-      * Audio Alert Chime for detected violations
+	  - Detection Modules:
+	      * Tab 1: Image Inspector (Drag & Drop, File Upload, Clipboard Paste Ctrl+V, Quick Test Gallery)
+	      * Tab 2: Video File Upload Analyzer (Analyze MP4/AVI/MOV traffic video clips by timestamp)
+	      * Tab 3: Direct Image URL Stream Analyzer
+	      * Tab 4: Incident Analytics & Session Log with CSV/JSON Export & Historical Telemetry
+	      * Side-by-Side (Original vs Annotated) and full telemetry breakdown table
+	      * Audio Alert Chime for detected violations
 ========================================================================================
 """
 
@@ -956,18 +954,8 @@ HTML_CONTENT = """<!DOCTYPE html>
                     </button>
                 </li>
                 <li class="nav-item">
-                    <button class="nav-link" id="tab-yt-btn" data-bs-toggle="pill" data-bs-target="#tab-yt" type="button">
-                        <i class="fab fa-youtube me-1" style="color: #ff0033;"></i> YouTube Stream
-                    </button>
-                </li>
-                <li class="nav-item">
                     <button class="nav-link" id="tab-video-btn" data-bs-toggle="pill" data-bs-target="#tab-video" type="button">
                         <i class="fas fa-film me-1"></i> Video Upload
-                    </button>
-                </li>
-                <li class="nav-item">
-                    <button class="nav-link" id="tab-webcam-btn" data-bs-toggle="pill" data-bs-target="#tab-webcam" type="button">
-                        <i class="fas fa-video me-1"></i> Live WebCam
                     </button>
                 </li>
                 <li class="nav-item">
@@ -1176,63 +1164,7 @@ HTML_CONTENT = """<!DOCTYPE html>
             </div>
 
             <!-- ------------------------------------------------------------------
-                 TAB 2: YOUTUBE VIDEO STREAM ANALYZER
-                 ------------------------------------------------------------------ -->
-            <div class="tab-pane fade" id="tab-yt" role="tabpanel">
-                <div class="glass-plate p-4">
-                    <div class="d-flex justify-content-between align-items-center mb-3">
-                        <div>
-                            <span class="eyebrow-label"><i class="fab fa-youtube text-danger me-1"></i> YouTube Video Stream Frame Inspector</span>
-                            <h5 class="fw-bold mb-0" style="font-family: var(--font-aeonikpro); color: var(--color-text-primary);">Analyze Online YouTube Traffic Feeds</h5>
-                        </div>
-                        <span class="auth-badge"><i class="fas fa-bolt me-1"></i> yt-dlp + YOLOv8</span>
-                    </div>
-
-                    <p class="small mb-4" style="color: var(--color-text-muted);">
-                        Extracts high-resolution video frames directly from any YouTube traffic or road surveillance clip and executes instant helmet detection using the active model.
-                    </p>
-
-                    <div class="row g-3 mb-4">
-                        <div class="col-lg-8">
-                            <label class="eyebrow-label mb-1">YouTube Video URL</label>
-                            <input type="text" id="yt-url-input" class="form-control auth-input w-100" 
-                                   placeholder="https://www.youtube.com/watch?v=UemFRPrl1hk" 
-                                   value="https://www.youtube.com/watch?v=UemFRPrl1hk">
-                        </div>
-                        <div class="col-lg-2">
-                            <label class="eyebrow-label mb-1">Timestamp (Sec)</label>
-                            <input type="number" id="yt-timestamp-input" class="form-control auth-input" min="0" step="1" value="5">
-                        </div>
-                        <div class="col-lg-2 d-flex align-items-end">
-                            <button class="btn-void-violet w-100" id="btn-yt-inspect" onclick="inspectYouTubeVideo()">
-                                <i class="fas fa-play me-1"></i> Inspect
-                            </button>
-                        </div>
-                    </div>
-
-                    <!-- Quick Preset Buttons -->
-                    <div class="d-flex align-items-center gap-2 mb-3">
-                        <span class="eyebrow-label">Presets:</span>
-                        <button class="btn-ghost-pill btn-sm" onclick="setYtPreset('https://www.youtube.com/watch?v=UemFRPrl1hk', 5)">
-                            <i class="fab fa-youtube text-danger me-1"></i> Road Surveillance (UemFRPrl1hk)
-                        </button>
-                    </div>
-
-                    <!-- YouTube Video Meta Info -->
-                    <div id="yt-info-card" class="steel-subplate p-3 mb-3" style="display: none;">
-                        <div class="d-flex justify-content-between align-items-center">
-                            <div>
-                                <span class="eyebrow-label">STREAM METADATA</span>
-                                <div class="fw-semibold text-truncate" id="yt-meta-title" style="color: var(--color-text-primary); max-width: 650px;">--</div>
-                            </div>
-                            <span class="auth-badge" id="yt-meta-time">0s</span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- ------------------------------------------------------------------
-                 TAB 3: VIDEO FILE UPLOAD ANALYZER
+                 TAB 2: VIDEO FILE UPLOAD ANALYZER
                  ------------------------------------------------------------------ -->
             <div class="tab-pane fade" id="tab-video" role="tabpanel">
                 <div class="glass-plate p-4">
@@ -1261,9 +1193,38 @@ HTML_CONTENT = """<!DOCTYPE html>
             </div>
 
             <!-- ------------------------------------------------------------------
-                 TAB 4: LIVE WEBCAM HUD
+                 TAB 2: VIDEO FILE UPLOAD ANALYZER
                  ------------------------------------------------------------------ -->
-            <div class="tab-pane fade" id="tab-webcam" role="tabpanel">
+            <div class="tab-pane fade" id="tab-video" role="tabpanel">
+                <div class="glass-plate p-4">
+                    <span class="eyebrow-label"><i class="fas fa-film me-1"></i> Local Video File Inspector</span>
+                    <h5 class="fw-bold mb-2" style="font-family: var(--font-aeonikpro); color: var(--color-text-primary);">Upload MP4 / AVI Traffic Video</h5>
+                    <p class="small mb-4" style="color: var(--color-text-muted);">
+                        Upload any traffic CCTV recording (.mp4, .avi, .mov) and choose a timestamp frame to detect helmet violations.
+                    </p>
+
+                    <div class="row g-3 align-items-end mb-3">
+                        <div class="col-lg-7">
+                            <label class="eyebrow-label mb-1">Select Video File</label>
+                            <input type="file" id="video-file-input" class="form-control auth-input" accept="video/*">
+                        </div>
+                        <div class="col-lg-3">
+                            <label class="eyebrow-label mb-1">Target Second (Timestamp)</label>
+                            <input type="number" id="video-sec-input" class="form-control auth-input" min="0" step="1" value="0">
+                        </div>
+                        <div class="col-lg-2">
+                            <button class="btn-void-violet w-100" onclick="uploadAndInspectVideo()">
+                                <i class="fas fa-bolt me-1"></i> Scan Frame
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ------------------------------------------------------------------
+                 TAB 3: DIRECT IMAGE URL STREAM
+                 ------------------------------------------------------------------ -->
+            <div class="tab-pane fade" id="tab-url" role="tabpanel">
                 <div class="glass-plate p-4 text-center">
                     <span class="eyebrow-label"><i class="fas fa-video me-1"></i> Real-Time Surveillance</span>
                     <h5 class="fw-bold mb-2" style="font-family: var(--font-aeonikpro); color: var(--color-text-primary);">Live Browser WebCam Violation Stream</h5>
@@ -1917,76 +1878,11 @@ HTML_CONTENT = """<!DOCTYPE html>
 
         // 15. Live WebCam Streaming
         async function startWebcam() {
-            const video = document.getElementById('webcam-video');
-            const canvas = document.getElementById('webcam-canvas');
-            const output = document.getElementById('webcam-output');
-            const placeholder = document.getElementById('cam-placeholder');
-
-            try {
-                webcamStream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 } });
-                video.srcObject = webcamStream;
-                video.play();
-
-                placeholder.style.display = 'none';
-                output.style.display = 'block';
-
-                document.getElementById('btn-start-cam').disabled = true;
-                document.getElementById('btn-stop-cam').disabled = false;
-                isWebcamRunning = true;
-
-                let lastTime = performance.now();
-                let frameCount = 0;
-
-                webcamInterval = setInterval(async () => {
-                    if (!isWebcamRunning) return;
-
-                    canvas.width = video.videoWidth || 640;
-                    canvas.height = video.videoHeight || 480;
-                    const ctx = canvas.getContext('2d');
-                    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-                    const dataUrl = canvas.toDataURL('image/jpeg', 0.65);
-                    const conf = document.getElementById('conf-slider').value / 100.0;
-
-                    try {
-                        const res = await fetch('/detect_webcam_frame', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ frame: dataUrl, conf })
-                        });
-                        const result = await res.json();
-                        if (result.image_url) {
-                            output.src = result.image_url;
-                            document.getElementById('cam-safe').innerText = result.with_helmet;
-                            document.getElementById('cam-viol').innerText = result.without_helmet;
-                        }
-
-                        // FPS Calculation
-                        frameCount++;
-                        const now = performance.now();
-                        if (now - lastTime >= 1000) {
-                            document.getElementById('cam-fps').innerText = frameCount;
-                            frameCount = 0;
-                            lastTime = now;
-                        }
-                    } catch(e) {}
-                }, 200);
-
-            } catch(e) {
-                alert('Could not access webcam: ' + e.message);
-            }
+            alert('WebCam feature has been removed.');
         }
 
         function stopWebcam() {
-            isWebcamRunning = false;
-            if (webcamInterval) clearInterval(webcamInterval);
-            if (webcamStream) {
-                webcamStream.getTracks().forEach(t => t.stop());
-            }
-            document.getElementById('btn-start-cam').disabled = false;
-            document.getElementById('btn-stop-cam').disabled = true;
-            document.getElementById('webcam-output').style.display = 'none';
-            document.getElementById('cam-placeholder').style.display = 'block';
+            // No-op
         }
     </script>
 </body>
