@@ -102,6 +102,21 @@ async def index():
             .upload-card { background: white; border-radius: 15px; padding: 30px; box-shadow: 0 4px 20px rgba(0,0,0,0.05); max-width: 800px; margin: auto; text-align: center; }
             #result-img { max-width: 100%; border-radius: 10px; margin-top: 20px; display: none; }
             .status-badge { font-size: 1.2rem; padding: 10px 20px; border-radius: 50px; display: inline-block; margin-top: 15px; display: none; }
+            .drop-zone {
+                border: 2px dashed #cbd5e1;
+                border-radius: 10px;
+                padding: 30px;
+                cursor: pointer;
+                transition: all 0.3s ease;
+                background: #fff;
+                margin-bottom: 15px;
+                color: #64748b;
+            }
+            .drop-zone.dragover {
+                border-color: #0d6efd;
+                background: #eef6ff;
+                color: #0d6efd;
+            }
         </style>
     </head>
     <body>
