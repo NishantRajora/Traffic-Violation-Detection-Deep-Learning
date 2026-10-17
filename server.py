@@ -3,11 +3,12 @@ import cv2
 import numpy as np
 import base64
 import time
+import urllib.request
 from datetime import datetime
 from pathlib import Path
 import torch
 from ultralytics import YOLO
-from fastapi import FastAPI, UploadFile, File, Form
+from fastapi import FastAPI, UploadFile, File, Form, Body
 from fastapi.responses import HTMLResponse, JSONResponse
 import uvicorn
 
@@ -104,32 +105,63 @@ async def index():
         </style>
     </head>
     <body>
-        <div class="upload-card">
-            <h2>🚦 Traffic Violation Detector</h2>
-            <p class="text-muted">Upload an image to check for helmet compliance</p>
+    <div class="upload-card">
+        <h2 class="mb-4">🚦 Traffic Violation Detector</h2>
+
+        <div class="mb-5 p-3 border rounded bg-light text-start">
+            <h6 class="fw-bold text-primary">Option 1: Upload File</h6>
             <div class="mb-3">
                 <input type="file" id="fileInput" class="form-control" accept="image/*">
             </div>
-            <button onclick="uploadImage()" class="btn btn-primary btn-lg w-100">Analyze Image</button>
-            <div id="status" class="status-badge"></div>
-            <img id="result-img">
+            <button onclick="uploadImage()" class="btn btn-primary w-100">Analyze Uploaded Image</button>
         </div>
 
-        <script>
-            async function uploadImage() {
-                const fileInput = document.getElementById('fileInput');
-                if (!fileInput.files[0]) return alert('Please select an image');
+        <div class="mb-4 p-3 border rounded bg-light text-start">
+            <h6 class="fw-bold text-primary">Option 2: Provide Image Link</h6>
+            <div class="input-group mb-3">
+                <input type="text" id="urlInput" class="form-control" placeholder="https://example.com/image.jpg">
+                <button onclick="analyzeUrl()" class="btn btn-outline-primary">Analyze Link</button>
+            </div>
+        </div>
 
-                const formData = new FormData();
-                formData.append('file', fileInput.files[0]);
+        <div id="status" class="status-badge"></div>
+        <img id="result-img">
+    </div>
 
-                const imgEl = document.getElementById('result-img');
-                const statusEl = document.getElementById('status');
+    <script>
+        async function uploadImage() {
+            const fileInput = document.getElementById('fileInput');
+            if (!fileInput.files[0]) return alert('Please select an image');
 
-                imgEl.style.display = 'none';
-                statusEl.style.display = 'none';
+            const formData = new FormData();
+            formData.append('file', fileInput.files[0]);
 
-                const res = await fetch('/predict', { method: 'POST', body: formData });
+            processRequest('/predict', formData);
+        }
+
+        async function analyzeUrl() {
+            const urlInput = document.getElementById('urlInput');
+            if (!urlInput.value) return alert('Please enter an image URL');
+
+            const payload = { url: urlInput.value };
+            processRequest('/predict_url', payload, true);
+        }
+
+        async function processRequest(endpoint, body, isJson = false) {
+            const imgEl = document.getElementById('result-img');
+            const statusEl = document.getElementById('status');
+
+            imgEl.style.display = 'none';
+            statusEl.style.display = 'none';
+
+            try {
+                const options = {
+                    method: 'POST',
+                    headers: isJson ? { 'Content-Type': 'application/json' } : {},
+                    body: isJson ? JSON.stringify(body) : body
+                };
+
+                const res = await fetch(endpoint, options);
                 const data = await res.json();
 
                 if (data.success) {
@@ -141,11 +173,49 @@ async def index():
                 } else {
                     alert('Error: ' + data.error);
                 }
+            } catch (e) {
+                alert('Request failed: ' + e.message);
             }
-        </script>
+        }
+    </script>
     </body>
     </html>
     """
+
+@app.post("/predict_url")
+async def predict_url(payload: dict = Body(...)):
+    try:
+        url = payload.get("url")
+        if not url:
+            return JSONResponse(status_code=400, content={"success": False, "error": "URL is required"})
+
+        # Download image from URL
+        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+        with urllib.request.urlopen(req, timeout=10) as response:
+            arr = np.asarray(bytearray(response.read()), dtype=np.uint8)
+            img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+
+        if img is None:
+            return JSONResponse(status_code=400, content={"success": False, "error": "Could not decode image from URL"})
+
+        results = model.predict(img, conf=0.25, device=DEVICE, verbose=False)[0]
+        annotated, stats, detections = annotate_frame(img, [results])
+
+        _, buf = cv2.imencode('.jpg', annotated)
+        b64_img = base64.b64encode(buf).decode('utf-8')
+
+        viol_count = stats["Without Helmet"]
+
+        return {
+            "success": True,
+            "violation": viol_count > 0,
+            "with_helmet": stats["With Helmet"],
+            "without_helmet": viol_count,
+            "image_url": f"data:image/jpeg;base64,{b64_img}",
+            "detections": detections
+        }
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"success": False, "error": str(e)})
 
 @app.post("/predict")
 async def predict(file: UploadFile = File(...)):
